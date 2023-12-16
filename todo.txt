@@ -1,0 +1,24 @@
+Topic Monte Carlo
+
+- Redo risk calculations using a Monte Carlo Sim instead of a historical one.
+
+Questions
+
+-> Choice of Distribution
+-- Maybe do a Markov Chain Monte Carlo
+-- Simple Gausian Process
+-- ARMA-GARCH
+
+-> Compare Results to historical and filtered simulation
+-- How good is it in the backtest
+-- Are the risk figures significantly different
+
+-> Do we have to modify our earlier statement about crypto assets? (Which one?)
+
+
+
+Monte Carlo Ideas --------------------------------------------------------------
+the equity portfolio
+the crypto portfolio
+the overall portfolio
+the single position portfolios for all assets
