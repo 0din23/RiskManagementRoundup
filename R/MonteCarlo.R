@@ -136,7 +136,7 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N){
   degrees_of_freedom <- (6 / excess_kurtosis) + 4
   degrees_of_freedom <- round(mean(degrees_of_freedom))
   
-  CoMa <- (degrees_of_freedom-2)/(degrees_of_freedom)*  CoMa
+  CoMa <- (degrees_of_freedom-2)/(degrees_of_freedom) *  CoMa
   
   # Generate standard normal
   temp_sim <- data.frame(matrix(rnorm(n = N*ncol(CoMa)), ncol = ncol(CoMa)))
@@ -162,13 +162,31 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N){
 ################################################################################
 # COV Standard Estimator #
 ################################################################################
- standardEstimator <- function(returns){
+standardEstimator <- function(returns){
    
    returns %>%
      apply(.,2,function(x){
        res <- sweep(returns , 1, as.matrix(x), `*`)
-       colSums(res, na.rm=T) / apply(res, 2,function(c){length(na.omit(x))})
+       colSums(res, na.rm=T) / apply(res, 2,function(c){length(na.omit(c))})
        })
    
- }
+}
+
+weightedEstimator <- function(returns, lambda = 0.5){
+  
+  returns %>%
+    apply(.,2,function(x){
+      
+      res <- sweep(returns , 1, as.matrix(x), `*`)
+      n_res <- apply(res, 2,function(c){length(na.omit(c))})
+      lambda_vec <-  apply(res, 2,function(c){
+        N <-  length(na.omit(c))
+        Nbig <- nrow(res)
+        lv <- c(rep(NA, Nbig-N),(1-lambda)^(N:1-1))
+        lv})
+      res <- sweep(returns , 2, lambda_vec, `*`)
+      colSums(res, na.rm=T) * (lambda/n_res)
+    })
+  
+}
 

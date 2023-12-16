@@ -36,13 +36,13 @@ end_date = "2023-06-30" %>% as.Date()
 start_date = "2020-01-01" %>% as.Date()
 
 ## Calculate PnL
-PRICES <- price_data %>% filter(Date>=start_date) %>% filter(Date <= end_date) %>% select(-Date)
+PRICES <- price_data %>% filter(Date>=start_date-1) %>% filter(Date <= end_date) %>% select(-Date)
 Port_PRICES <- PRICES[,1:11]
 FX_PRICES <- PRICES[,-c(1:11)]
 FX_PRICES <- FX_PRICES[, match(portfolio_data$currency, colnames(FX_PRICES))]
 FX_PRICES <- 1/FX_PRICES 
 Port_PRICES <- Port_PRICES * FX_PRICES
-PnL <- CHANGE(as.matrix(Port_PRICES) %*% as.numeric(portfolio_data$PositionSize))
+PnL <- CHANGE(as.matrix(Port_PRICES) %*% as.numeric(portfolio_data$PositionSize)) %>% na.omit()
 
 ## Simple Gausian VaR
 simpleGaus_df <- MonteCarlo_main(prices=price_data, window=200,
@@ -56,4 +56,16 @@ simpleStudents_df <- MonteCarlo_main(prices=price_data, window=200,
 
 
 
+# Visualize results ############################################################
+Eval_df <- simpleGaus_df %>% 
+  left_join(., simpleStudents_df, by ="Date")
+
+Eval_df$PnL <- PnL
+
+Eval_df %>% 
+  ggplot(.) + 
+  geom_line(aes(x=Date, y = VaR_gaus, color = "VaR_gaus")) +
+  geom_line(aes(x=Date, y = VaR_t_simple, color = "VaR_t_simple")) +
+  geom_point(aes(x=Date, y = PnL, color = "PnL")) + 
+  theme_tq()
 
