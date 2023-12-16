@@ -45,12 +45,19 @@ Port_PRICES <- Port_PRICES * FX_PRICES
 PnL <- CHANGE(as.matrix(Port_PRICES) %*% as.numeric(portfolio_data$PositionSize)) %>% na.omit()
 
 ## Simple Gausian VaR
-simpleGaus_df <- MonteCarlo_main(prices=price_data, window=200,
+simpleGaus_df <- MonteCarlo_main(prices=price_data, window=100,
                                  start_date=start_date, end_date=end_date,
                                  portfolio_data=portfolio_data, sim_method = "gaus")
 
+simpleGaus_weighted_df <- MonteCarlo_main(prices=price_data, window=100,
+                                 start_date=start_date, end_date=end_date,
+                                 portfolio_data=portfolio_data, sim_method = "gaus", 
+                                 cov_method = "weighted")
+
+cov_method
+
 ## Simple Students t VaR
-simpleStudents_df <- MonteCarlo_main(prices=price_data, window=200,
+simpleStudents_df <- MonteCarlo_main(prices=price_data, window=100,
                                  start_date=start_date, end_date=end_date,
                                  portfolio_data=portfolio_data, sim_method = "t_simple")
 
@@ -69,3 +76,7 @@ Eval_df %>%
   geom_point(aes(x=Date, y = PnL, color = "PnL")) + 
   theme_tq()
 
+
+## Check for breaches
+mean(Eval_df$VaR_gaus>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_t_simple>Eval_df$PnL, na.rm=T)

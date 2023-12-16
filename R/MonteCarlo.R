@@ -1,4 +1,4 @@
-MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data, sim_method = "gaus"){
+MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data, sim_method = "gaus", cov_method = "standard"){
   
   # Extract range
   DateRange <- prices %>% filter(Date>=start_date) %>% filter(Date <= end_date) %>% pull(Date)
@@ -8,7 +8,7 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
     lapply(., function(chunck_date){
     
       data_chunk <- prices %>% filter(Date <= chunck_date) %>% tail(.,window)
-      VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, sim_method = sim_method)
+      VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, sim_method = sim_method, cov_method=cov_method)
       print(paste0("Date: ", chunck_date, " VaR: ", VaR))
       return(VaR)
     }) %>% unlist()
@@ -27,7 +27,7 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
 # MONTE CARLO VAR FUNCTION #
 ################################################################################
 
-applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.05, sim_method){
+applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.05, sim_method, cov_method){
   
   ## Calculate base price
   base_price <- price_df %>% select(-Date) %>% tail(.,1) %>% t() %>% as.data.frame() %>% mutate(Ticker = rownames(.)) %>% select(Ticker, Price = V1)
@@ -37,9 +37,9 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.05, sim_me
   
   ## Simulate Returns
   if(sim_method == "gaus"){
-    SIM_RETURNS <- gausReturn(prices %>% select(-EUREUR), mean = NULL, log = TRUE, N = N) 
+    SIM_RETURNS <- gausReturn(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method) 
   } else if(sim_method == "t_simple"){
-    SIM_RETURNS <- tStudendReturn_simple(prices %>% select(-EUREUR), mean = NULL, log = TRUE, N = N) 
+    SIM_RETURNS <- tStudendReturn_simple(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method) 
   }
   
   ## Calculate PnL
@@ -60,7 +60,7 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.05, sim_me
 ################################################################################
 
 # Gauß Returns
-gausReturn <- function(prices, mean = NULL, log = TRUE, N){
+gausReturn <- function(prices, mean = NULL, log = TRUE, N, cov_method){
   
   ## Calculate Returns
   if(log){
@@ -82,7 +82,7 @@ gausReturn <- function(prices, mean = NULL, log = TRUE, N){
   }
   
   ## Estimate Covariance Matrix and decomposition
-  CoMa <- returns %>% standardEstimator(.)
+  CoMa <- returns %>% covEstimator(., cov_method)
   
   ## Calculate Cholesky decomposition
   Cholesky <- chol(CoMa)
@@ -99,7 +99,7 @@ gausReturn <- function(prices, mean = NULL, log = TRUE, N){
 }
 
 # Students t Returns simple version
-tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N){
+tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method){
   
   ## Calculate Returns
   if(log){
@@ -121,21 +121,13 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N){
   }
   
   ## Excess kurtosis
-  excess_kurtosis <- apply(returns, 2, function(x) {
-    x <- na.omit(x)
-    n <- length(x)
-    mean_x <- mean(x)
-    s <- sd(x)
-    sum(((x - mean_x)/s)^4)/n - 3
-  })
+  excess_kurtosis <- apply(returns, 2, function(x) {kurtosis(na.omit(x))-3})
+  degrees_of_freedom <- (6/excess_kurtosis) + 4
+  degrees_of_freedom <- ifelse(degrees_of_freedom <4, 4,degrees_of_freedom)
+  degrees_of_freedom <- round(mean(degrees_of_freedom, na.rm=TRUE))
   
   ## Estimate Covariance Matrix
-  CoMa <- returns %>% standardEstimator(.)
-  
-  ## Calibrate CoMa
-  degrees_of_freedom <- (6 / excess_kurtosis) + 4
-  degrees_of_freedom <- round(mean(degrees_of_freedom))
-  
+  CoMa <- returns %>% covEstimator(., cov_method)
   CoMa <- (degrees_of_freedom-2)/(degrees_of_freedom) *  CoMa
   
   # Generate standard normal
@@ -149,8 +141,10 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N){
   SIM_RETURNS <- as.matrix(temp_sim) %*% Cholesky
   
   ## Simulate Chi squared
-  chi_sim <- matrix(rnorm(n = N*degrees_of_freedom)^2, ncol = degrees_of_freedom) %>% rowSums()
-  chi_sim <- 1/sqrt(chi_sim/degrees_of_freedom)
+  # print(paste(excess_kurtosis, N, degrees_of_freedom))
+  chi_sim <- rchisq(n = N*degrees_of_freedom, df = degrees_of_freedom)
+  chi_sim <- sqrt(chi_sim /degrees_of_freedom)
+  chi_sim <- 1/chi_sim
   
   ## Scale Returns 
   SIM_RETURNS <- sweep(SIM_RETURNS , 1, as.matrix(chi_sim), `*`)
@@ -162,6 +156,15 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N){
 ################################################################################
 # COV Standard Estimator #
 ################################################################################
+
+covEstimator <- function(returns, cov_method){
+  if(cov_method == "standard"){
+    standardEstimator(returns)
+  } else if(cov_method == "weighted"){
+    weightedEstimator(returns)    
+  }
+  
+}
 standardEstimator <- function(returns){
    
    returns %>%
@@ -172,20 +175,16 @@ standardEstimator <- function(returns){
    
 }
 
-weightedEstimator <- function(returns, lambda = 0.5){
+weightedEstimator <- function(returns, lambda = 0.25){
   
   returns %>%
     apply(.,2,function(x){
       
       res <- sweep(returns , 1, as.matrix(x), `*`)
       n_res <- apply(res, 2,function(c){length(na.omit(c))})
-      lambda_vec <-  apply(res, 2,function(c){
-        N <-  length(na.omit(c))
-        Nbig <- nrow(res)
-        lv <- c(rep(NA, Nbig-N),(1-lambda)^(N:1-1))
-        lv})
-      res <- sweep(returns , 2, lambda_vec, `*`)
-      colSums(res, na.rm=T) * (lambda/n_res)
+      lambda_vec <-  apply(res, 2,function(c){(1-lambda)^(n_res[1]:1-1)})
+      res <- sweep(na.omit(res) , 1, lambda_vec, `*`)
+      colSums(res, na.rm=T) * (lambda/n_res[1])
     })
   
 }
