@@ -1,4 +1,5 @@
-MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data, sim_method = "gaus", cov_method = "standard"){
+MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data,
+                            sim_method = "gaus", cov_method = "standard", level = 0.01){
   
   # Extract range
   DateRange <- prices %>% filter(Date>=start_date) %>% filter(Date <= end_date) %>% pull(Date)
@@ -8,7 +9,9 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
     lapply(., function(chunck_date){
     
       data_chunk <- prices %>% filter(Date <= chunck_date) %>% tail(.,window)
-      VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, sim_method = sim_method, cov_method=cov_method)
+      VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, 
+                             sim_method = sim_method, cov_method=cov_method, 
+                             level=level)
       print(paste0("Date: ", chunck_date, " VaR: ", VaR))
       return(VaR)
     }) %>% unlist()
@@ -16,7 +19,7 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
   ## combine 
   res <- data.frame(
     "Date"=DateRange,
-    "VaR"=VaR
+    "VaR"=VaR %>% lag()
   )
   colnames(res) <- c("Date", paste0("VaR_", sim_method))
   return(res)
@@ -60,7 +63,7 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_me
 ################################################################################
 
 # Gauß Returns
-gausReturn <- function(prices, mean = NULL, log = TRUE, N, cov_method){
+gausReturn <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard"){
   
   ## Calculate Returns
   if(log){
@@ -99,7 +102,7 @@ gausReturn <- function(prices, mean = NULL, log = TRUE, N, cov_method){
 }
 
 # Students t Returns simple version
-tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method){
+tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard"){
   
   ## Calculate Returns
   if(log){
@@ -153,7 +156,7 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method
 }
 
 ################################################################################
-# COV Standard Estimator #
+# COV Estimator #
 ################################################################################
 
 ## Wrapper for the different covariance estimators
@@ -163,8 +166,9 @@ covEstimator <- function(returns, cov_method){
   } else if(cov_method == "weighted"){
     weightedEstimator(returns)    
   }
-  
 }
+
+
 standardEstimator <- function(returns){
    
    returns %>%
@@ -184,7 +188,7 @@ weightedEstimator <- function(returns, lambda = 0.25){
       n_res <- apply(res, 2,function(c){length(na.omit(c))})
       lambda_vec <-  apply(res, 2,function(c){(1-lambda)^(n_res[1]:1-1)})
       res <- sweep(na.omit(res) , 1, lambda_vec, `*`)
-      colSums(res, na.rm=T) * (lambda/n_res[1])
+      colSums(res, na.rm=T) * (lambda)
     })
   
 }

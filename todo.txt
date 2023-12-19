@@ -1,24 +1,26 @@
-Topic Monte Carlo
+What is already in there?
 
-- Redo risk calculations using a Monte Carlo Sim instead of a historical one.
+# CoVariance Estimator -------------------
+- Standard 
+- weighted
+x rescaled volatility
 
-Questions
-
--> Choice of Distribution
--- Maybe do a Markov Chain Monte Carlo
--- Simple Gausian Process
--- ARMA-GARCH
-
--> Compare Results to historical and filtered simulation
--- How good is it in the backtest
--- Are the risk figures significantly different
-
--> Do we have to modify our earlier statement about crypto assets? (Which one?)
+# Distribution -----------------------------
+- Log-Normal
+x t distribution
 
 
+To Do --------------------------------------------------------------------------
+- Remove Look ahead bias
 
-Monte Carlo Ideas --------------------------------------------------------------
-the equity portfolio
-the crypto portfolio
-the overall portfolio
-the single position portfolios for all assets
+- (Roxana) Fix t distribution 
+
+- (Niklas) Get historical results from other group / ask niklas 
+
+- (Yernur) rescaled volatility
+
+- 
+- Compare results 
+-- Different Portfolios
+-- Different lags
+-- Different Configuration
