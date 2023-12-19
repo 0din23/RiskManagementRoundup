@@ -1,11 +1,11 @@
 # Setup ########################################################################
 source("R/dependencies.R")
-data_path <-"C:/Finance/WS23/RMM/Data"
+source("R/CONFIG.R")
 
 # Get Data #####################################################################
-data_eq <- read_excel(paste0(data_path, "/MarketData.xlsx"), sheet="Equity")
-data_cr <- read_excel(paste0(data_path, '/MarketData.xlsx'), sheet = "Crypto")
-data_fx <- read_excel(paste0(data_path, '/MarketData.xlsx'), sheet = "FX")
+data_eq <- read_excel(paste0(DATA_PATH, "/MarketData.xlsx"), sheet="Equity")
+data_cr <- read_excel(paste0(DATA_PATH, '/MarketData.xlsx'), sheet = "Crypto")
+data_fx <- read_excel(paste0(DATA_PATH, '/MarketData.xlsx'), sheet = "FX")
 
 ## Process FX
 data_fx <- data_fx %>% 
@@ -21,9 +21,9 @@ price_data <- data_eq %>%
   left_join(.,data_fx, by = "Date")
 
 ## Get Portfolio Data
-pf_eq <- read_excel(paste0(data_path, "/Portfolio.xlsx"),sheet="Equity") %>% select(PositionSize, Ticker)
-pf_cr <- read_excel(paste0(data_path, "/Portfolio.xlsx"), sheet="Crypto") %>% select(PositionSize, Ticker)
-fx_info <- read_excel(paste0(data_path, "/MarketData.xlsx"),sheet="Overview") %>% select(Ticker,currency=`Product Currency`, asset_class =`Asset Class` )
+pf_eq <- read_excel(paste0(DATA_PATH, "/Portfolio.xlsx"),sheet="Equity") %>% select(PositionSize, Ticker)
+pf_cr <- read_excel(paste0(DATA_PATH, "/Portfolio.xlsx"), sheet="Crypto") %>% select(PositionSize, Ticker)
+fx_info <- read_excel(paste0(DATA_PATH, "/MarketData.xlsx"),sheet="Overview") %>% select(Ticker,currency=`Product Currency`, asset_class =`Asset Class` )
 portfolio_data <- pf_eq %>% rbind(.,pf_cr) %>% 
   left_join(fx_info, by = "Ticker") %>% 
   mutate(currency = paste0(currency, "EUR"))

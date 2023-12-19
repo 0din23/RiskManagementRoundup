@@ -27,7 +27,7 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
 # MONTE CARLO VAR FUNCTION #
 ################################################################################
 
-applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.05, sim_method, cov_method){
+applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_method, cov_method){
   
   ## Calculate base price
   base_price <- price_df %>% select(-Date) %>% tail(.,1) %>% t() %>% as.data.frame() %>% mutate(Ticker = rownames(.)) %>% select(Ticker, Price = V1)
@@ -65,12 +65,12 @@ gausReturn <- function(prices, mean = NULL, log = TRUE, N, cov_method){
   ## Calculate Returns
   if(log){
     returns <-  prices %>% 
-    pivot_longer(., cols = colnames(.)[colnames(.)!="Date"]) %>% 
-    group_by(name) %>% 
-    mutate(value = log(1 + RETURN(value))) %>% 
-    ungroup() %>% 
-    pivot_wider(names_from = name, values_from=value) %>% 
-    select(-Date)
+      pivot_longer(., cols = colnames(.)[colnames(.)!="Date"]) %>% 
+      group_by(name) %>% 
+      mutate(value = log(1 + RETURN(value))) %>% 
+      ungroup() %>% 
+      pivot_wider(names_from = name, values_from=value) %>% 
+      select(-Date)
   } else {
     returns <-  prices %>% 
       pivot_longer(., cols = colnames(.)[colnames(.)!="Date"]) %>% 
@@ -141,12 +141,11 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method
   SIM_RETURNS <- as.matrix(temp_sim) %*% Cholesky
   
   ## Simulate Chi squared
-  # print(paste(excess_kurtosis, N, degrees_of_freedom))
   chi_sim <- rchisq(n = N*degrees_of_freedom, df = degrees_of_freedom)
   chi_sim <- sqrt(chi_sim /degrees_of_freedom)
   chi_sim <- 1/chi_sim
   
-  ## Scale Returns 
+  ## Transform to Students T distribution
   SIM_RETURNS <- sweep(SIM_RETURNS , 1, as.matrix(chi_sim), `*`)
   if(log){SIM_RETURNS <- exp(SIM_RETURNS) -1}
   
@@ -157,6 +156,7 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method
 # COV Standard Estimator #
 ################################################################################
 
+## Wrapper for the different covariance estimators
 covEstimator <- function(returns, cov_method){
   if(cov_method == "standard"){
     standardEstimator(returns)
@@ -170,7 +170,7 @@ standardEstimator <- function(returns){
    returns %>%
      apply(.,2,function(x){
        res <- sweep(returns , 1, as.matrix(x), `*`)
-       colSums(res, na.rm=T) / apply(res, 2,function(c){length(na.omit(c))})
+       colSums(res, na.rm=T) / (apply(res, 2,function(c){length(na.omit(c))})-1)
        })
    
 }

@@ -57,7 +57,7 @@ start_date = "2020-01-01" %>% as.Date()
 
 ## Calculate PnL
 
-PRICES <- prices %>% filter(Date>=start_date) %>% filter(Date <= end_date) %>% select(-Date)
+PRICES <- price_data %>% filter(Date>=start_date) %>% filter(Date <= end_date) %>% select(-Date)
 Port_PRICES <- PRICES[,1:11]
 FX_PRICES <- PRICES[,-c(1:11)]
 FX_PRICES <- FX_PRICES[, match(portfolio_data$currency, colnames(FX_PRICES))]
