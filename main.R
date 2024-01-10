@@ -63,10 +63,18 @@ simpleStudents_df <- MonteCarlo_main(prices=price_data, window=100,
                                  portfolio_data=portfolio_data, sim_method = "t_simple",
                                  level = 0.01)
 
+
+# Gaus Residuals
+gaußResiduals_df <- MonteCarlo_main(prices=price_data, window=100,
+                                     start_date=start_date, end_date=end_date,
+                                     portfolio_data=portfolio_data, sim_method = "gausResiduals",
+                                     level = 0.01, extending = TRUE)
+
 # Visualize results ############################################################
 Eval_df <- simpleGaus_df %>% 
   left_join(., simpleGaus_weighted_df %>% select(Date, Gaus_weighted = VaR_gaus), by = "Date") %>% 
-  left_join(., simpleStudents_df, by ="Date")
+  left_join(., simpleStudents_df, by ="Date") %>% 
+  
 
 Eval_df$PnL <- PnL
 
