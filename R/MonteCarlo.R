@@ -144,7 +144,7 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method
   SIM_RETURNS <- as.matrix(temp_sim) %*% Cholesky
   
   ## Simulate Chi squared
-  chi_sim <- rchisq(n = N*degrees_of_freedom, df = degrees_of_freedom)
+  chi_sim <- rchisq(n = N, df = degrees_of_freedom)
   chi_sim <- sqrt(chi_sim /degrees_of_freedom)
   chi_sim <- 1/chi_sim
   
@@ -179,7 +179,7 @@ standardEstimator <- function(returns){
    
 }
 
-weightedEstimator <- function(returns, lambda = 0.25){
+weightedEstimator <- function(returns, lambda = 0.75){
   
   returns %>%
     apply(.,2,function(x){

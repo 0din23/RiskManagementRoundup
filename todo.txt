@@ -19,7 +19,8 @@ To Do --------------------------------------------------------------------------
 
 - (Yernur) rescaled volatility
 
-- 
+- (Niklas) Prepare results
+
 - Compare results 
 -- Different Portfolios
 -- Different lags

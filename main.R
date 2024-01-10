@@ -84,3 +84,4 @@ p %>% ggplotly()
 mean(Eval_df$VaR_gaus>Eval_df$PnL, na.rm=T)
 mean(Eval_df$Gaus_weighted>Eval_df$PnL, na.rm=T)
 mean(Eval_df$VaR_t_simple>Eval_df$PnL, na.rm=T)
+
