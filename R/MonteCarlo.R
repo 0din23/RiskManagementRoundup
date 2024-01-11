@@ -64,6 +64,7 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_me
   }
   
   ## Calculate PnL
+  browser()
   PRETURNS <- sweep(1+SIM_RETURNS[,1:11] , 2, base_price$Price[1:11], `*`)
   CRETURNS <- sweep(1+SIM_RETURNS[,-c(1:11)] , 2, base_price$Price[12:14], `*`) 
   CRETURNS <- cbind(CRETURNS,rep(1,nrow(CRETURNS)))
@@ -176,7 +177,7 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method
 # Residual method
 gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard", residual_cov_lag = 100){
   
-  print(prices$Date %>% tail(1))
+  #print(prices$Date %>% tail(1))
   ## Calculate Returns
   if(log){
     returns <- prices %>% 
@@ -198,28 +199,29 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
   
   ## residualize return
   #browser()
-  print("1")
+  #print("1")
   res_returns <- returns %>% na.omit() %>% apply(., 2, simpleGarchResiduals) %>% as.data.frame()
   
-  print("2")
+  #print("2")
   ## Estimate Covariance Matrix and decomposition
   CoMa <- res_returns %>% tail(residual_cov_lag) %>%  covEstimator(., cov_method)
   
-  print("3")
+  #print("3")
   ## Calculate Cholesky decomposition
   Cholesky <- chol(CoMa)
   
-  print("4")
+  #print("4")
   ## Generate standard normal
   temp_sim <- data.frame(matrix(rnorm(n = N*ncol(CoMa)), ncol = ncol(CoMa)))
   colnames(temp_sim) <- colnames(CoMa)
   
-  print("5")
+  #print("5")
   ## Forecast volatility and rescale
+  browser()
   forecast_vol <- returns %>% na.omit() %>% apply(., 2, simpleGARCHVol)
   SIM_RETURNS <- as.matrix(temp_sim) %*% Cholesky
   
-  print("6")
+  #print("6")
   SIM_RETURNS <- sweep(SIM_RETURNS , 2, forecast_vol, `*`)
   
   if(log){SIM_RETURNS <- exp(SIM_RETURNS) -1}
@@ -272,29 +274,9 @@ weightedEstimator <- function(returns, lambda = 0.75){
 simpleGARCHVol <- function(series){
   
   garch_returns <- series %>% na.omit() %>% as.numeric()
-  
-  # Specify a GARCH(1,1) model
-  spec <- ugarchspec(variance.model = list(model = "sGARCH", 
-                                           garchOrder = c(1, 1)), 
-                     mean.model = list(armaOrder = c(0, 0), 
-                                       include.mean = TRUE), 
-                     distribution.model = "std")
-  
-  # Fit the model
-  fit <- ugarchfit(spec = spec, data = garch_returns)
-  
-  # Forecast the next iteration of volatility
-  forecast <- ugarchforecast(fit, n.ahead = 1)
-  
-  # Extract the forecasted volatility
-  forecasted_volatility <- sigma(forecast)
-  return(forecasted_volatility)
-}
-
-simpleGarchResiduals <- function(series){
-  garch_returns <- series %>% na.omit() %>% as.numeric()
-  
-  res <- tryCatch(expr = {
+  if(sd(garch_returns)==0){
+    return(1)
+  } else {
     # Specify a GARCH(1,1) model
     spec <- ugarchspec(variance.model = list(model = "sGARCH", 
                                              garchOrder = c(1, 1)), 
@@ -304,15 +286,62 @@ simpleGarchResiduals <- function(series){
     
     # Fit the model
     fit <- ugarchfit(spec = spec, data = garch_returns)
-    res <- sigma(fit)
-    res <- as.data.frame(res)[[1]]
-    return(res)
-  }, error = function(cond){
+    
+    if(fit@fit$convergence==1){
+      return(sd(garch_returns))
+    } else{
+      forecast <- ugarchforecast(fit, n.ahead = 1)
+      forecasted_volatility <- sigma(forecast)
+      return(forecasted_volatility)  
+    }
+
+  }
+  
+}
+
+simpleGarchResiduals <- function(series){
+  
+  garch_returns <- series %>% na.omit() %>% as.numeric()
+  
+  if(sd(garch_returns)==0){
+    garch_returns <- ifelse(garch_returns== 0,1,garch_returns)
     res <- garch_returns/garch_returns
-    return(res)
-  })
-  
-  
-  res <- garch_returns / res
-  return(res)
+    return(as.numeric(res))
+  } else {
+    res <- tryCatch(expr = {
+      # Specify a GARCH(1,1) model
+      spec <- ugarchspec(variance.model = list(model = "sGARCH", 
+                                               garchOrder = c(1, 1)), 
+                         mean.model = list(armaOrder = c(0, 0), 
+                                           include.mean = TRUE), 
+                         distribution.model = "std")
+      
+      # Fit the model
+      fit <- ugarchfit(spec = spec, data = garch_returns)
+      res <- sigma(fit)
+      if(length(res)==0){
+        print("GARCH Problem")
+        res <- garch_returns
+      } else {
+        res <- as.data.frame(res)[[1]] 
+      }
+      
+      return(as.numeric(res))
+    }, error = function(cond){
+      
+      garch_returns <- ifelse(garch_returns== 0,1,garch_returns)
+      res <- garch_returns/garch_returns
+      return(as.numeric(res))
+    })
+    
+    if(!(sd(res)==0)){
+      
+      res <- garch_returns / res 
+    }
+    if(length(res)==0){
+      res <- garch_returns
+    }
+    return(as.numeric(res))
+  }
+
 }
