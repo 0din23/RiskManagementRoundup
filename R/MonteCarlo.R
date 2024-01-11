@@ -64,7 +64,7 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_me
   }
   
   ## Calculate PnL
-  browser()
+  #browser()
   PRETURNS <- sweep(1+SIM_RETURNS[,1:11] , 2, base_price$Price[1:11], `*`)
   CRETURNS <- sweep(1+SIM_RETURNS[,-c(1:11)] , 2, base_price$Price[12:14], `*`) 
   CRETURNS <- cbind(CRETURNS,rep(1,nrow(CRETURNS)))
@@ -217,9 +217,9 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
   
   #print("5")
   ## Forecast volatility and rescale
-  browser()
+  # browser()
   forecast_vol <- returns %>% na.omit() %>% apply(., 2, simpleGARCHVol)
-  SIM_RETURNS <- as.matrix(temp_sim) %*% Cholesky
+  SIM_RETURNS <- as.matrix(temp_sim) #%*% Cholesky
   
   #print("6")
   SIM_RETURNS <- sweep(SIM_RETURNS , 2, forecast_vol, `*`)

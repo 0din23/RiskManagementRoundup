@@ -73,7 +73,7 @@ gaußResiduals_df <- MonteCarlo_main(prices=price_data, window=100,
 # Visualize results ############################################################
 Eval_df <- simpleGaus_df %>% 
   left_join(., simpleGaus_weighted_df %>% select(Date, Gaus_weighted = VaR_gaus), by = "Date") %>% 
-  left_join(., simpleStudents_df, by ="Date") %>% 
+  left_join(., simpleStudents_df, by ="Date") 
   
 
 Eval_df$PnL <- PnL
