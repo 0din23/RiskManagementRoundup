@@ -214,13 +214,13 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
   }
   
   ## residualize return
-  #browser()
+  # browser()
   #print("1")
   res_returns <- returns %>% na.omit() %>% apply(., 2, simpleGarchResiduals) %>% as.data.frame()
   
   #print("2")
   ## Estimate Covariance Matrix and decomposition
-  CoMa <- res_returns %>% tail(residual_cov_lag) %>%  covEstimator(., cov_method)
+  CoMa <- res_returns %>% tail(residual_cov_lag) %>%  cor(.)
   
   #print("3")
   ## Calculate Cholesky decomposition
@@ -238,7 +238,7 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
     simpleGARCHVol(returns[[col]]) %>% as.numeric()
   }) %>% unlist()
   #forecast_vol <- returns %>% na.omit() %>% apply(., 2, simpleGARCHVol)
-  SIM_RETURNS <- as.matrix(temp_sim) #%*% Cholesky
+  SIM_RETURNS <- as.matrix(temp_sim) %*% Cholesky
   
   #print("6")
   SIM_RETURNS <- sweep(SIM_RETURNS , 2, forecast_vol, `*`)
@@ -290,7 +290,7 @@ standardEstimator <- function(returns){
    
 }
 
-weightedEstimator <- function(returns, lambda = 0.3){
+weightedEstimator <- function(returns, lambda = 0.15){
   
   returns %>%
     apply(.,2,function(x){
@@ -356,28 +356,28 @@ simpleGarchResiduals <- function(series){
       # Fit the model
       fit <- ugarchfit(spec = spec, data = garch_returns)
       res <- sigma(fit)
+      
       if(length(res)==0){
         print("GARCH Problem")
         res <- garch_returns
       } else {
-        res <- as.data.frame(res)[[1]] 
+        res <- as.data.frame(res)[[1]]
+        res <- garch_returns / res
       }
       
       return(as.numeric(res))
     }, error = function(cond){
-      
-      garch_returns <- ifelse(garch_returns== 0,1,garch_returns)
-      res <- garch_returns/garch_returns
+      res <- garch_returns/mean(sqrt(3.14/2)*abs(garch_returns))
       return(as.numeric(res))
     })
     
-    if(!(sd(res)==0)){
-      
-      res <- garch_returns / res 
-    }
-    if(length(res)==0){
-      res <- garch_returns
-    }
+    # if(!(sd(res)==0)){
+    #   
+    #   res <- garch_returns / res 
+    # }
+    # if(length(res)==0){
+    #   res <- garch_returns
+    # }
     return(as.numeric(res))
   }
 

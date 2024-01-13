@@ -35,7 +35,7 @@ portfolio_data <- pf_eq %>% rbind(.,pf_cr) %>%
 ## dates
 end_date = "2023-06-30" %>% as.Date() 
 start_date = "2020-01-01" %>% as.Date()
-start_date2 = "2022-07-15" %>% as.Date()
+start_date2 = "2023-06-01" %>% as.Date()
 
 ## Calculate PnL
 PRICES <- price_data %>% filter(Date>=start_date-1) %>% filter(Date <= end_date) %>% select(-Date)
@@ -86,10 +86,11 @@ simpleStudents_weighted_df <- MonteCarlo_main(prices=price_data, window=100,
 
 # Gaus Residuals
 gaußResiduals_df <- MonteCarlo_main(prices=price_data, window=100,
-                                     start_date=start_date, end_date=end_date,
+                                     start_date=start_date2, end_date=end_date,
                                      portfolio_data=portfolio_data, sim_method = "gausResiduals",
                                      level = 0.01, extending = TRUE)
 save(gaußResiduals_df, file="gaußResiduals_df.RData")
+
 ## Simple historical simulation
 historical_df <- MonteCarlo_main(prices=price_data, window=100,
                                     start_date=start_date, end_date=end_date,
@@ -136,5 +137,6 @@ mean(Eval_df$VaR_t_100>Eval_df$PnL, na.rm=T)
 mean(Eval_df$VaR_t_250>Eval_df$PnL, na.rm=T)
 mean(Eval_df$VaR_t_weighted>Eval_df$PnL, na.rm=T)
 
+mean(Eval_df$VaR_gausResiduals>Eval_df$PnL, na.rm=T)
 mean(Eval_df$VaR_historical>Eval_df$PnL, na.rm=T)
 
