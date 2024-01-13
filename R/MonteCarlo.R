@@ -1,6 +1,7 @@
 MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data,
                             sim_method = "gaus", cov_method = "standard", level = 0.01,
-                            extending = FALSE, residual_cov_lag = 100){
+                            extending = FALSE, residual_cov_lag = 100, N=10000,
+                            contrib = FALSE){
   
   # Extract range
   DateRange <- prices %>% filter(Date>=start_date) %>% filter(Date <= end_date) %>% pull(Date)
@@ -13,7 +14,7 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
           data_chunk <- prices %>% filter(Date <= chunck_date) %>% tail(.,window)
           VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, 
                                  sim_method = sim_method, cov_method=cov_method, 
-                                 level=level)
+                                 level=level, N=N)
           print(paste0("Date: ", chunck_date, " VaR: ", VaR))
           return(VaR)
         }) %>% unlist()
@@ -21,17 +22,18 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
     VaR <- DateRange %>% 
       lapply(., function(chunck_date){
         
-        data_chunk <- prices %>% filter(Date <= chunck_date)
+        data_chunk <- prices %>% filter(Date <= chunck_date) %>% na.omit()
         VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, 
                                sim_method = sim_method, cov_method=cov_method, 
-                               level=level, residual_cov_lag = residual_cov_lag)
+                               level=level, residual_cov_lag = residual_cov_lag, N=N)
         print(paste0("Date: ", chunck_date, " VaR: ", VaR))
         return(VaR)
-      }) %>% unlist()
+      })  %>% unlist()
   }
 
   
   ## combine 
+  
   res <- data.frame(
     "Date"=DateRange,
     "VaR"=VaR %>% lag()
@@ -44,15 +46,15 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
 ################################################################################
 # MONTE CARLO VAR FUNCTION #
 ################################################################################
-
 applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_method, cov_method,
-                            residual_cov_lag = 100){
+                            residual_cov_lag = 100, contrib = FALSE){
   
   ## Calculate base price
   base_price <- price_df %>% select(-Date) %>% tail(.,1) %>% t() %>% as.data.frame() %>% mutate(Ticker = rownames(.)) %>% select(Ticker, Price = V1)
   portfolio <- portfolio %>% left_join(., base_price, by = "Ticker")
   portfolio <- portfolio %>% left_join(., base_price %>% select(Ticker, FX_RATE = Price), by=c("currency" = "Ticker")) 
-  pVal <- sum(portfolio$PositionSize * portfolio$Price * 1/(portfolio$FX_RATE))
+  positions <- portfolio$PositionSize * portfolio$Price * 1/(portfolio$FX_RATE)
+  pVal <- sum(positions)
   
   ## Simulate Returns
   if(sim_method == "gaus"){
@@ -61,6 +63,8 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_me
     SIM_RETURNS <- tStudendReturn_simple(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method) 
   } else if(sim_method == "gausResiduals"){
     SIM_RETURNS <- gausResiduals(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method, residual_cov_lag = residual_cov_lag) 
+  } else if(sim_method == "historical"){
+    SIM_RETURNS <-histSimulation(price_df %>% select(-EUREUR), N = N) 
   }
   
   ## Calculate PnL
@@ -72,9 +76,21 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_me
   CRETURNS <- CRETURNS[, match(portfolio$currency, colnames(CRETURNS))]
   CRETURNS <- 1 / CRETURNS
   RETURNS <- CRETURNS * PRETURNS
-  PnL <- (RETURNS %*% portfolio$PositionSize) - pVal
+  colnames(RETURNS) <- colnames(PRETURNS)
   
-  return(quantile(PnL, probs = level) %>% as.numeric())
+  if(!contrib){
+    PnL <- (as.matrix(RETURNS) %*% portfolio$PositionSize) - pVal
+    return(quantile(PnL, probs = level, na.rm = T) %>% as.numeric()) 
+  } else {
+    PnL <- sweep(as.matrix(RETURNS) , 2, portfolio$PositionSize, `*`) 
+    PnL <- sweep(PnL , 2, positions, `-`) 
+    PnL_total <- PnL %>% rowSums()
+    VaR <- sort(PnL_total)
+    VaR <- VaR[ceiling(level * length(VaR))]
+    check_col <- PnL_total == VaR
+    VaR_contrib <- PnL[check_col, ]
+    return(VaR_contrib)
+  }
 }
 
 ################################################################################
@@ -217,8 +233,11 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
   
   #print("5")
   ## Forecast volatility and rescale
-  # browser()
-  forecast_vol <- returns %>% na.omit() %>% apply(., 2, simpleGARCHVol)
+  #browser()
+  forecast_vol <- lapply(c(1:ncol(returns)), function(col){
+    simpleGARCHVol(returns[[col]]) %>% as.numeric()
+  }) %>% unlist()
+  #forecast_vol <- returns %>% na.omit() %>% apply(., 2, simpleGARCHVol)
   SIM_RETURNS <- as.matrix(temp_sim) #%*% Cholesky
   
   #print("6")
@@ -230,6 +249,23 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
   return(SIM_RETURNS)
 }
 
+
+# Historical Simulation
+histSimulation <- function(prices,N){
+  
+  ## Calculate Returns
+  #browser()
+  SIM_RETURNS <-prices %>% 
+      pivot_longer(., cols = colnames(.)[colnames(.)!="Date"]) %>% 
+      group_by(name) %>% 
+      mutate(value = RETURN(value)) %>% 
+      ungroup() %>% 
+      pivot_wider(names_from = name, values_from=value) %>% 
+      select(-Date) %>% 
+    tail(N)
+  
+  return(SIM_RETURNS)
+}
 ################################################################################
 # COV Estimator #
 ################################################################################
@@ -254,13 +290,14 @@ standardEstimator <- function(returns){
    
 }
 
-weightedEstimator <- function(returns, lambda = 0.75){
+weightedEstimator <- function(returns, lambda = 0.3){
   
   returns %>%
     apply(.,2,function(x){
       
       res <- sweep(returns , 1, as.matrix(x), `*`)
       n_res <- apply(res, 2,function(c){length(na.omit(c))})
+      # browser()
       lambda_vec <-  apply(res, 2,function(c){(1-lambda)^(n_res[1]:1-1)})
       res <- sweep(na.omit(res) , 1, lambda_vec, `*`)
       colSums(res, na.rm=T) * (lambda)
@@ -272,7 +309,7 @@ weightedEstimator <- function(returns, lambda = 0.75){
 # Vol Models #
 ################################################################################
 simpleGARCHVol <- function(series){
-  
+  # print("hi")
   garch_returns <- series %>% na.omit() %>% as.numeric()
   if(sd(garch_returns)==0){
     return(1)
@@ -292,7 +329,7 @@ simpleGARCHVol <- function(series){
     } else{
       forecast <- ugarchforecast(fit, n.ahead = 1)
       forecasted_volatility <- sigma(forecast)
-      return(forecasted_volatility)  
+      return(as.numeric(forecasted_volatility))  
     }
 
   }
