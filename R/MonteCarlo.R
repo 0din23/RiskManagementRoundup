@@ -255,7 +255,7 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
 }
 
 # Residual method with t distribution
-tResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard", residual_cov_lag = 100){
+tResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard", residual_cov_lag = 100, max_df = 10){
   
   ## Calculate Returns
   if(log){

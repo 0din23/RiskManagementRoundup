@@ -68,19 +68,20 @@ simpleGaus_weighted_df <- MonteCarlo_main(prices=price_data, window=100,
 simpleStudents_df_100 <- MonteCarlo_main(prices=price_data, window=100,
                                  start_date=start_date, end_date=end_date,
                                  portfolio_data=portfolio_data, sim_method = "t_simple",
-                                 level = 0.01) %>%
+                                 level = 0.01, max_df = 10) %>%
   select(Date, VaR_t_100 = VaR_t_simple)
 
 simpleStudents_df_250 <- MonteCarlo_main(prices=price_data, window=100,
                                          start_date=start_date, end_date=end_date,
                                          portfolio_data=portfolio_data, sim_method = "t_simple",
-                                         level = 0.01) %>%
+                                         level = 0.01, max_df = 10) %>%
   select(Date, VaR_t_250 = VaR_t_simple)
 
 simpleStudents_weighted_df <- MonteCarlo_main(prices=price_data, window=100,
                                          start_date=start_date, end_date=end_date,
                                          portfolio_data=portfolio_data, sim_method = "t_simple",
-                                         cov_method = "weighted", level = 0.01, extending = TRUE) %>%
+                                         cov_method = "weighted", level = 0.01, extending = TRUE,
+                                         max_df = 10) %>%
   select(Date, VaR_t_weighted = VaR_t_simple)
 
 
@@ -95,14 +96,21 @@ save(gaußResiduals_df, file="gaußResiduals_df.RData")
 tResiduals_df <- MonteCarlo_main(prices=price_data, window=100,
                                     start_date=start_date, end_date=end_date,
                                     portfolio_data=portfolio_data, sim_method = "tResiduals",
-                                    level = 0.01, extending = TRUE)
-save(gaußResiduals_df, file="gaußResiduals_df.RData")
+                                    level = 0.01, extending = TRUE, max_df = 10)
+save(tResiduals_df, file="tResiduals_df")
 
 ## Simple historical simulation
-historical_df <- MonteCarlo_main(prices=price_data, window=100,
+historical_df_250 <- MonteCarlo_main(prices=price_data, window=100,
                                     start_date=start_date, end_date=end_date,
                                     portfolio_data=portfolio_data, sim_method = "historical",
-                                    level = 0.01, extending = TRUE, N = 1000)
+                                    level = 0.01, extending = TRUE, N = 250) %>% 
+  select(Date, VaR_historical_250 = VaR_historical)
+
+historical_df_500 <- MonteCarlo_main(prices=price_data, window=100,
+                                     start_date=start_date, end_date=end_date,
+                                     portfolio_data=portfolio_data, sim_method = "historical",
+                                     level = 0.01, extending = TRUE, N = 500) %>% 
+  select(Date, VaR_historical_500 = VaR_historical)
 
 # Visualize results ############################################################
 Eval_df <- simpleGaus_df_100 %>% 
@@ -112,7 +120,8 @@ Eval_df <- simpleGaus_df_100 %>%
   left_join(., simpleStudents_df_250, by ="Date") %>% 
   left_join(., simpleStudents_weighted_df, by ="Date") %>% 
   left_join(., gaußResiduals_df, by ="Date") %>% 
-  left_join(., historical_df, by ="Date") 
+  left_join(., historical_df_250, by ="Date") %>% 
+  left_join(., historical_df_500, by ="Date")
   
 
 Eval_df$PnL <- PnL
@@ -129,7 +138,9 @@ p <- Eval_df %>%
   
   geom_line(aes(x=Date, y = VaR_gausResiduals, color = "VaR_gausResiduals")) +
   
-  geom_line(aes(x=Date, y = VaR_historical, color = "VaR_historical")) +
+  geom_line(aes(x=Date, y = VaR_historical_250, color = "VaR_historical")) +
+  geom_line(aes(x=Date, y = VaR_historical_500, color = "VaR_historical")) +
+  
   geom_point(aes(x=Date, y = PnL, color = "PnL")) + 
   theme_tq() + ylab("PnL / VaR")
 
