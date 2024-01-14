@@ -1,7 +1,7 @@
 MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data,
                             sim_method = "gaus", cov_method = "standard", level = 0.01,
-                            extending = FALSE, residual_cov_lag = 100, N=10000,
-                            contrib = FALSE){
+                            extending = FALSE, residual_cov_lag = 100, N=100000,
+                            contrib = FALSE, max_df = 10){
   
   # Extract range
   DateRange <- prices %>% filter(Date>=start_date) %>% filter(Date <= end_date) %>% pull(Date)
@@ -14,7 +14,7 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
           data_chunk <- prices %>% filter(Date <= chunck_date) %>% tail(.,window)
           VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, 
                                  sim_method = sim_method, cov_method=cov_method, 
-                                 level=level, N=N)
+                                 level=level, N=N, max_df=max_df)
           print(paste0("Date: ", chunck_date, " VaR: ", VaR))
           return(VaR)
         }) %>% unlist()
@@ -25,7 +25,8 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
         data_chunk <- prices %>% filter(Date <= chunck_date) %>% na.omit()
         VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, 
                                sim_method = sim_method, cov_method=cov_method, 
-                               level=level, residual_cov_lag = residual_cov_lag, N=N)
+                               level=level, residual_cov_lag = residual_cov_lag, N=N,
+                               max_df = max_df)
         print(paste0("Date: ", chunck_date, " VaR: ", VaR))
         return(VaR)
       })  %>% unlist()
@@ -47,7 +48,7 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
 # MONTE CARLO VAR FUNCTION #
 ################################################################################
 applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_method, cov_method,
-                            residual_cov_lag = 100, contrib = FALSE){
+                            residual_cov_lag = 100, contrib = FALSE, max_df = 10){
   
   ## Calculate base price
   base_price <- price_df %>% select(-Date) %>% tail(.,1) %>% t() %>% as.data.frame() %>% mutate(Ticker = rownames(.)) %>% select(Ticker, Price = V1)
@@ -60,11 +61,13 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_me
   if(sim_method == "gaus"){
     SIM_RETURNS <- gausReturn(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method) 
   } else if(sim_method == "t_simple"){
-    SIM_RETURNS <- tStudendReturn_simple(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method) 
+    SIM_RETURNS <- tStudendReturn_simple(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method, max_df=max_df) 
   } else if(sim_method == "gausResiduals"){
     SIM_RETURNS <- gausResiduals(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method, residual_cov_lag = residual_cov_lag) 
   } else if(sim_method == "historical"){
     SIM_RETURNS <-histSimulation(price_df %>% select(-EUREUR), N = N) 
+  } else if(sim_method == "tResiduals"){
+    SIM_RETURNS <- tResiduals(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method, residual_cov_lag = residual_cov_lag,max_df = max_df) 
   }
   
   ## Calculate PnL
@@ -137,7 +140,7 @@ gausReturn <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard"
 }
 
 # Students t Returns simple version
-tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard"){
+tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard", max_df =10){
   
   ## Calculate Returns
   if(log){
@@ -163,6 +166,8 @@ tStudendReturn_simple <- function(prices, mean = NULL, log = TRUE, N, cov_method
   degrees_of_freedom <- (6/excess_kurtosis) + 4
   degrees_of_freedom <- ifelse(degrees_of_freedom <4, 4,degrees_of_freedom)
   degrees_of_freedom <- round(mean(degrees_of_freedom, na.rm=TRUE))
+  print(paste0("T-Dist df: ", degrees_of_freedom, " - max. df: ", max_df))
+  if(!is.null(max_df)){degrees_of_freedom <- ifelse(degrees_of_freedom > max_df, max_df,degrees_of_freedom)}
   
   ## Estimate Covariance Matrix
   CoMa <- returns %>% covEstimator(., cov_method)
@@ -249,6 +254,72 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
   return(SIM_RETURNS)
 }
 
+# Residual method with t distribution
+tResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard", residual_cov_lag = 100){
+  
+  ## Calculate Returns
+  if(log){
+    returns <- prices %>% 
+      pivot_longer(., cols = colnames(.)[colnames(.)!="Date"]) %>% 
+      group_by(name) %>% 
+      mutate(value = log(1 + RETURN(value))) %>% 
+      ungroup() %>% 
+      pivot_wider(names_from = name, values_from=value) %>% 
+      select(-Date)
+  } else {
+    returns <-  prices %>% 
+      pivot_longer(., cols = colnames(.)[colnames(.)!="Date"]) %>% 
+      group_by(name) %>% 
+      mutate(value = RETURN(value)) %>% 
+      ungroup() %>% 
+      pivot_wider(names_from = name, values_from=value) %>% 
+      select(-Date)
+  }
+  
+  ## residualize return
+  res_returns <- returns %>% na.omit() %>% apply(., 2, simpleGarchResiduals) %>% as.data.frame()
+  
+  ## Excess kurtosis
+  excess_kurtosis <- apply(res_returns, 2, function(x) {kurtosis(na.omit(x))-3})
+  degrees_of_freedom <- (6/excess_kurtosis) + 4
+  degrees_of_freedom <- ifelse(degrees_of_freedom <4, 4,degrees_of_freedom)
+  degrees_of_freedom <- round(mean(degrees_of_freedom, na.rm=TRUE))
+  print(paste0("T-Dist df: ", degrees_of_freedom, " - max. df: ", max_df))
+  if(!is.null(max_df)){degrees_of_freedom <- ifelse(degrees_of_freedom > max_df, max_df,degrees_of_freedom)}
+  
+  ## Estimate Covariance Matrix
+  CoMa <- res_returns %>% tail(residual_cov_lag) %>% covEstimator(., cov_method)
+  CoMa <- (degrees_of_freedom-2)/(degrees_of_freedom) *  CoMa
+  
+  # Generate standard normal
+  temp_sim <- data.frame(matrix(rnorm(n = N*ncol(CoMa)), ncol = ncol(CoMa)))
+  colnames(temp_sim) <- colnames(CoMa)
+  
+  ## Calculate Cholesky decomposition
+  Cholesky <- chol(CoMa)
+  
+  ## apply cholesky
+  SIM_RETURNS <- as.matrix(temp_sim) %*% Cholesky
+  
+  ## Simulate Chi squared
+  chi_sim <- rchisq(n = N, df = degrees_of_freedom)
+  chi_sim <- sqrt(chi_sim /degrees_of_freedom)
+  chi_sim <- 1/chi_sim
+  
+  ## Transform to Students T distribution
+  SIM_RETURNS <- sweep(SIM_RETURNS , 1, as.matrix(chi_sim), `*`)
+  
+  ## Forecast volatility and rescale
+  forecast_vol <- lapply(c(1:ncol(returns)), function(col){
+    simpleGARCHVol(returns[[col]]) %>% as.numeric()
+  }) %>% unlist()
+  SIM_RETURNS <- sweep(SIM_RETURNS , 2, forecast_vol, `*`)
+  
+  if(log){SIM_RETURNS <- exp(SIM_RETURNS) -1}
+  
+  
+  return(SIM_RETURNS)
+}
 
 # Historical Simulation
 histSimulation <- function(prices,N){

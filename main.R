@@ -71,7 +71,7 @@ simpleStudents_df_100 <- MonteCarlo_main(prices=price_data, window=100,
                                  level = 0.01) %>%
   select(Date, VaR_t_100 = VaR_t_simple)
 
-simpleStudents_df_250 <- MonteCarlo_main(prices=price_data, window=250,
+simpleStudents_df_250 <- MonteCarlo_main(prices=price_data, window=100,
                                          start_date=start_date, end_date=end_date,
                                          portfolio_data=portfolio_data, sim_method = "t_simple",
                                          level = 0.01) %>%
@@ -86,16 +86,23 @@ simpleStudents_weighted_df <- MonteCarlo_main(prices=price_data, window=100,
 
 # Gaus Residuals
 gaußResiduals_df <- MonteCarlo_main(prices=price_data, window=100,
-                                     start_date=start_date2, end_date=end_date,
+                                     start_date=start_date, end_date=end_date,
                                      portfolio_data=portfolio_data, sim_method = "gausResiduals",
                                      level = 0.01, extending = TRUE)
+save(gaußResiduals_df, file="gaußResiduals_df.RData")
+
+# t Residuals
+tResiduals_df <- MonteCarlo_main(prices=price_data, window=100,
+                                    start_date=start_date, end_date=end_date,
+                                    portfolio_data=portfolio_data, sim_method = "tResiduals",
+                                    level = 0.01, extending = TRUE)
 save(gaußResiduals_df, file="gaußResiduals_df.RData")
 
 ## Simple historical simulation
 historical_df <- MonteCarlo_main(prices=price_data, window=100,
                                     start_date=start_date, end_date=end_date,
                                     portfolio_data=portfolio_data, sim_method = "historical",
-                                    level = 0.01, extending = TRUE, N = 250)
+                                    level = 0.01, extending = TRUE, N = 1000)
 
 # Visualize results ############################################################
 Eval_df <- simpleGaus_df_100 %>% 
@@ -127,6 +134,19 @@ p <- Eval_df %>%
   theme_tq() + ylab("PnL / VaR")
 
 p %>% ggplotly()
+
+## Check for breaches
+mean(Eval_df$VaR_gaus_100>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_gaus_250>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_gaus_weighted>Eval_df$PnL, na.rm=T)
+
+mean(Eval_df$VaR_t_100>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_t_250>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_t_weighted>Eval_df$PnL, na.rm=T)
+
+mean(Eval_df$VaR_gausResiduals>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_historical>Eval_df$PnL, na.rm=T)
+
 
 ## Check for breaches
 mean(Eval_df$VaR_gaus_100>Eval_df$PnL, na.rm=T)
