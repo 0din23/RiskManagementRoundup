@@ -97,20 +97,20 @@ tResiduals_df <- MonteCarlo_main(prices=price_data, window=100,
                                     start_date=start_date, end_date=end_date,
                                     portfolio_data=portfolio_data, sim_method = "tResiduals",
                                     level = 0.01, extending = TRUE, max_df = 10)
-save(tResiduals_df, file="tResiduals_df")
+save(tResiduals_df, file="tResiduals_df.RData")
 
 ## Simple historical simulation
-historical_df_250 <- MonteCarlo_main(prices=price_data, window=100,
+historical_df_252 <- MonteCarlo_main(prices=price_data, window=100,
                                     start_date=start_date, end_date=end_date,
                                     portfolio_data=portfolio_data, sim_method = "historical",
-                                    level = 0.01, extending = TRUE, N = 250) %>% 
-  select(Date, VaR_historical_250 = VaR_historical)
+                                    level = 0.01, extending = TRUE, N = 252) %>% 
+  select(Date, VaR_historical_252 = VaR_historical)
 
-historical_df_500 <- MonteCarlo_main(prices=price_data, window=100,
+historical_df_504 <- MonteCarlo_main(prices=price_data, window=100,
                                      start_date=start_date, end_date=end_date,
                                      portfolio_data=portfolio_data, sim_method = "historical",
-                                     level = 0.01, extending = TRUE, N = 500) %>% 
-  select(Date, VaR_historical_500 = VaR_historical)
+                                     level = 0.01, extending = TRUE, N = 504) %>% 
+  select(Date, VaR_historical_504 = VaR_historical)
 
 # Visualize results ############################################################
 Eval_df <- simpleGaus_df_100 %>% 
@@ -120,8 +120,9 @@ Eval_df <- simpleGaus_df_100 %>%
   left_join(., simpleStudents_df_250, by ="Date") %>% 
   left_join(., simpleStudents_weighted_df, by ="Date") %>% 
   left_join(., gaußResiduals_df, by ="Date") %>% 
-  left_join(., historical_df_250, by ="Date") %>% 
-  left_join(., historical_df_500, by ="Date")
+  left_join(., tResiduals_df, by ="Date") %>% 
+  left_join(., historical_df_252, by ="Date") %>% 
+  left_join(., historical_df_504, by ="Date")
   
 
 Eval_df$PnL <- PnL
@@ -137,12 +138,14 @@ p <- Eval_df %>%
   geom_line(aes(x=Date, y = VaR_t_weighted, color = "VaR_t_weighted")) +
   
   geom_line(aes(x=Date, y = VaR_gausResiduals, color = "VaR_gausResiduals")) +
+  geom_line(aes(x=Date, y = VaR_tResiduals, color = "VaR_tResiduals")) +
   
-  geom_line(aes(x=Date, y = VaR_historical_250, color = "VaR_historical")) +
-  geom_line(aes(x=Date, y = VaR_historical_500, color = "VaR_historical")) +
+  geom_line(aes(x=Date, y = VaR_historical_252, color = "VaR_historical_250")) +
+  geom_line(aes(x=Date, y = VaR_historical_504, color = "VaR_historical_500")) +
   
   geom_point(aes(x=Date, y = PnL, color = "PnL")) + 
-  theme_tq() + ylab("PnL / VaR")
+  theme_tq() + ylab("PnL / VaR") +
+  ggtitle("Value at Risk - Backtest")
 
 p %>% ggplotly()
 
@@ -156,18 +159,40 @@ mean(Eval_df$VaR_t_250>Eval_df$PnL, na.rm=T)
 mean(Eval_df$VaR_t_weighted>Eval_df$PnL, na.rm=T)
 
 mean(Eval_df$VaR_gausResiduals>Eval_df$PnL, na.rm=T)
-mean(Eval_df$VaR_historical>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_tResiduals>Eval_df$PnL, na.rm=T)
+
+mean(Eval_df$VaR_historical_252>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_historical_504>Eval_df$PnL, na.rm=T)
 
 
-## Check for breaches
-mean(Eval_df$VaR_gaus_100>Eval_df$PnL, na.rm=T)
-mean(Eval_df$VaR_gaus_250>Eval_df$PnL, na.rm=T)
-mean(Eval_df$VaR_gaus_weighted>Eval_df$PnL, na.rm=T)
+## Average VaR
+mean(Eval_df$VaR_gaus_100, na.rm=T)
+mean(Eval_df$VaR_gaus_250, na.rm=T)
+mean(Eval_df$VaR_gaus_weighted, na.rm=T)
 
-mean(Eval_df$VaR_t_100>Eval_df$PnL, na.rm=T)
-mean(Eval_df$VaR_t_250>Eval_df$PnL, na.rm=T)
-mean(Eval_df$VaR_t_weighted>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_t_100, na.rm=T)
+mean(Eval_df$VaR_t_250, na.rm=T)
+mean(Eval_df$VaR_t_weighted, na.rm=T)
 
-mean(Eval_df$VaR_gausResiduals>Eval_df$PnL, na.rm=T)
-mean(Eval_df$VaR_historical>Eval_df$PnL, na.rm=T)
+mean(Eval_df$VaR_gausResiduals, na.rm=T)
+mean(Eval_df$VaR_tResiduals, na.rm=T)
+
+mean(Eval_df$VaR_historical_252, na.rm=T)
+mean(Eval_df$VaR_historical_504, na.rm=T)
+
+
+## Average VaR
+mean(abs(Eval_df$VaR_gaus_100 - Eval_df$PnL), na.rm=T)
+mean(Eval_df$VaR_gaus_250, na.rm=T)
+mean(Eval_df$VaR_gaus_weighted, na.rm=T)
+
+mean(Eval_df$VaR_t_100, na.rm=T)
+mean(Eval_df$VaR_t_250, na.rm=T)
+mean(Eval_df$VaR_t_weighted, na.rm=T)
+
+mean(Eval_df$VaR_gausResiduals, na.rm=T)
+mean(Eval_df$VaR_tResiduals, na.rm=T)
+
+mean(Eval_df$VaR_historical_250, na.rm=T)
+mean(Eval_df$VaR_historical_500, na.rm=T)
 
