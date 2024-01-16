@@ -14,10 +14,11 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
           data_chunk <- prices %>% filter(Date <= chunck_date) %>% tail(.,window)
           VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, 
                                  sim_method = sim_method, cov_method=cov_method, 
-                                 level=level, N=N, max_df=max_df)
+                                 level=level, N=N, max_df=max_df, contrib = contrib)
           print(paste0("Date: ", chunck_date, " VaR: ", VaR))
           return(VaR)
-        }) %>% unlist()
+        })
+      if(!contrib){VaR <- VaR %>% unlist()}else{VaR <- VaR %>% rbindlist()}
   } else{
     VaR <- DateRange %>% 
       lapply(., function(chunck_date){
@@ -26,20 +27,28 @@ MonteCarlo_main <- function(prices, window, start_date, end_date, portfolio_data
         VaR <- applyMonteCarlo(price_df=data_chunk, portfolio = portfolio_data, 
                                sim_method = sim_method, cov_method=cov_method, 
                                level=level, residual_cov_lag = residual_cov_lag, N=N,
-                               max_df = max_df)
+                               max_df = max_df, contrib = contrib)
         print(paste0("Date: ", chunck_date, " VaR: ", VaR))
+        
         return(VaR)
-      })  %>% unlist()
+      })
+    if(!contrib){VaR <- VaR %>% unlist()}else{VaR <- VaR %>% rbindlist()}
   }
 
   
   ## combine 
-  
-  res <- data.frame(
-    "Date"=DateRange,
-    "VaR"=VaR %>% lag()
-  )
-  colnames(res) <- c("Date", paste0("VaR_", sim_method))
+  if(!contrib){
+    res <- data.frame(
+      "Date"=DateRange,
+      "VaR"=VaR %>% lag()
+    )
+    colnames(res) <- c("Date", paste0("VaR_", sim_method)) 
+  } else {
+    res <- data.frame(
+      "Date"=DateRange,
+      VaR
+    )
+  }
   return(res)
 }
 
@@ -67,17 +76,19 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_me
   } else if(sim_method == "historical"){
     SIM_RETURNS <-histSimulation(price_df %>% select(-EUREUR), N = N) 
   } else if(sim_method == "tResiduals"){
-    SIM_RETURNS <- tResiduals(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method, residual_cov_lag = residual_cov_lag,max_df = max_df) 
+    SIM_RETURNS <- tResiduals(price_df %>% select(-EUREUR), mean = NULL, log = TRUE, N = N, cov_method, residual_cov_lag = residual_cov_lag,
+                              max_df = max_df) 
   }
   
   ## Calculate PnL
-  #browser()
+  # browser()
   PRETURNS <- sweep(1+SIM_RETURNS[,1:11] , 2, base_price$Price[1:11], `*`)
   CRETURNS <- sweep(1+SIM_RETURNS[,-c(1:11)] , 2, base_price$Price[12:14], `*`) 
   CRETURNS <- cbind(CRETURNS,rep(1,nrow(CRETURNS)))
   colnames(CRETURNS) <- c(colnames(CRETURNS)[1:3],"EUREUR")
   CRETURNS <- CRETURNS[, match(portfolio$currency, colnames(CRETURNS))]
   CRETURNS <- 1 / CRETURNS
+  PRETURNS <- PRETURNS %>% as.data.frame() %>% select(all_of(portfolio$Ticker)) %>% as.matrix()
   RETURNS <- CRETURNS * PRETURNS
   colnames(RETURNS) <- colnames(PRETURNS)
   
@@ -92,6 +103,7 @@ applyMonteCarlo <- function(price_df, portfolio, N = 10000, level = 0.01, sim_me
     VaR <- VaR[ceiling(level * length(VaR))]
     check_col <- PnL_total == VaR
     VaR_contrib <- PnL[check_col, ]
+    VaR_contrib <- VaR_contrib %>% t() %>%  as.data.frame()
     return(VaR_contrib)
   }
 }
@@ -225,7 +237,11 @@ gausResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standa
   
   #print("2")
   ## Estimate Covariance Matrix and decomposition
-  CoMa <- res_returns %>% tail(residual_cov_lag) %>%  cor(.)
+  if(cov_method == "weighted"){
+    CoMa <- res_returns %>% covEstimator(., cov_method)
+  } else{
+    CoMa <- res_returns %>% tail(residual_cov_lag) %>%  cor(.)
+  }
   
   #print("3")
   ## Calculate Cholesky decomposition
@@ -288,7 +304,12 @@ tResiduals <- function(prices, mean = NULL, log = TRUE, N, cov_method="standard"
   if(!is.null(max_df)){degrees_of_freedom <- ifelse(degrees_of_freedom > max_df, max_df,degrees_of_freedom)}
   
   ## Estimate Covariance Matrix
-  CoMa <- res_returns %>% tail(residual_cov_lag) %>% covEstimator(., cov_method)
+  if(cov_method == "weighted"){
+    CoMa <- res_returns %>% covEstimator(., cov_method)
+  } else{
+    CoMa <- res_returns %>% tail(residual_cov_lag) %>%  cor(.)
+  }
+  
   CoMa <- (degrees_of_freedom-2)/(degrees_of_freedom) *  CoMa
   
   # Generate standard normal
